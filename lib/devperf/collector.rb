@@ -11,13 +11,19 @@ module DevPerf
     end
 
     def collect(repo:, from:, to:)
+      status("Fetching commits...")
       commits = collect_commits(repo, from, to)
+
+      status("Fetching pull requests updated since #{from.iso8601}...")
       pulls = collect_pull_requests(repo, from)
+      status("Found #{pulls.length} pull requests; collecting review and comment activity.")
       reviews = []
       comments = []
       contributors = []
 
-      pulls.each do |pull|
+      progress_interval = progress_interval(pulls.length)
+      next_progress = progress_interval
+      pulls.each_with_index do |pull, index|
         author = account(pull["user"])
         author_activity_date = [pull["created_at"], pull["merged_at"]].map { |value| github_date(value) }
           .find { |date| in_range?(date, from, to) }
@@ -30,6 +36,9 @@ module DevPerf
         collect_reviews(repo, number, owner_login, from, to, reviews, contributors)
         collect_comments(repo, number, owner_login, :conversation, "issues", from, to, comments, contributors)
         collect_comments(repo, number, owner_login, :inline, "pulls", from, to, comments, contributors)
+
+        next_progress = report_progress("Pull request activity", index + 1, pulls.length,
+                                         progress_interval, next_progress)
       end
 
       { commits: commits, reviews: reviews, comments: comments, contributors: contributors }
@@ -52,6 +61,7 @@ module DevPerf
         { entry: entry, user: user, sha: sha, date: github_date(entry.dig("commit", "committer", "date")) }
       end.compact
 
+      status("Found #{entries.length} commits in range; collecting line stats for #{attributable.length} attributable commits.")
       stats = commit_stats(repo, attributable.map { |item| item[:sha] })
       attributable.map do |item|
         commit_stats = stats[item[:sha]] || {}
@@ -63,6 +73,9 @@ module DevPerf
 
     def commit_stats(repo, shas)
       stats = {}
+      interval = progress_interval(shas.length)
+      next_progress = interval
+      processed = 0
       shas.each_slice(COMMIT_STATS_BATCH_SIZE) do |batch|
         begin
           stats.merge!(graphql_commit_stats(repo, batch))
@@ -74,8 +87,28 @@ module DevPerf
           detail = @client.get("repos/#{repo}/commits/#{sha}")
           stats[sha] = detail["stats"] if detail.is_a?(Hash) && detail["stats"].is_a?(Hash)
         end
+
+        processed += batch.length
+        next_progress = report_progress("Commit line stats", processed, shas.length, interval, next_progress)
       end
       stats
+    end
+
+    def progress_interval(total)
+      [[total / 10, 1].max, 100].min
+    end
+
+    def report_progress(label, completed, total, interval, next_progress)
+      return next_progress if completed < next_progress && completed < total
+
+      status("#{label}: #{completed}/#{total}")
+      next_progress += interval while next_progress <= completed
+      next_progress
+    end
+
+    def status(message)
+      $stdout.puts(message)
+      $stdout.flush
     end
 
     def graphql_commit_stats(repo, shas)
