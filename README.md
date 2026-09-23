@@ -45,6 +45,10 @@ For each human contributor observed in the selected range, DevPerf reports:
 
 The two comment counts include both PR conversation comments and inline review comments. For every metric, the summary shows your value, competition rank, percentile, cohort size, the other contributors' median, and the highest cohort value. Ties share a competition rank. Percentile uses the midrank rule: contributors below your value plus half of those tied, divided by cohort size. No combined score is calculated. Bot accounts identified by GitHub, `[bot]` logins, Dependabot, and Renovate are excluded.
 
+## Progress output
+
+During collection, DevPerf prints and flushes status messages to stdout. After the total is known, commit line-stat and pull-request activity progress is reported about every 10% for smaller groups and every 100 items for larger groups. For example, a run with 2,700 attributable commits prints 27 line-stat progress messages. The final report follows the collection status.
+
 ## Limitations
 
 - Commits come from the repository's default-branch commit list; commits that exist only on unmerged branches are not counted.
