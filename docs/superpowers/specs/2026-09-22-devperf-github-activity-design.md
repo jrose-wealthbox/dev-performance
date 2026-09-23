@@ -21,6 +21,14 @@ The command accepts `login`, `repo=owner/name`, and exactly one range form: `day
 - Count a review when GitHub supplies `submitted_at`; pending reviews are not submissions. Count conversation and inline comments separately during collection, then combine them for the two requested comment metrics.
 - Classify a comment as on the commenter's own PR when the PR author login equals the commenter's login; otherwise classify it as on another person's PR.
 
+## Cache behavior
+
+- Cache normalized activity as one JSON file per repository and UTC date at `~/.cache/devperf/v1/<owner>/<repo>/<YYYY-MM-DD>.json`. The `v1` directory isolates this cache format from future versions.
+- For requested dates before today, load cache entries first and fetch only missing dates. Fetch missing contiguous ranges in chunks of at most 30 days; write a chunk's daily entries only after its collection completes successfully.
+- Always fetch today's activity fresh and never read or write a cache entry for today. Also avoid caching future dates, so an empty future result cannot become stale when the date arrives.
+- Cache only the normalized records needed for aggregation; do not persist credentials, raw response pages, or comment bodies.
+- If a later chunk fails, earlier completed chunks remain available to the next run. A cold long-range request may still hit API limits: pull-request discovery includes later-updated PRs that may hold events from the selected dates, so chunks may have overlapping PR candidates.
+
 ## Cohort, metrics, and ranking
 
 The cohort is the union of human GitHub logins observed as committers, PR authors opening or merging a PR in the range, review authors, or comment authors in the range, plus the requested login even if they have no activity. GitHub accounts with `type=Bot`, logins ending in `[bot]`, and the standard `dependabot`/`renovate` identities are excluded. Commits without a linked GitHub login are not attributed to a person.
@@ -41,11 +49,12 @@ For each metric, higher values rank first. Show the user's value, competition ra
 - `bin/devperf`: executable entry point and `key=value` argument validation.
 - `lib/devperf/github_client.rb`: safe `gh api` subprocess calls, JSON decoding, pagination, and GraphQL requests.
 - `lib/devperf/collector.rb`: GitHub endpoint selection, date filtering, commit-stat batching/fallback, and normalized in-memory activity records.
+- `lib/devperf/activity_cache.rb` and `lib/devperf/cached_collector.rb`: daily JSON storage, cache lookup, missing-range fetches, and merging cached/fresh activity.
 - `lib/devperf/metrics.rb`: pure cohort aggregation, bot exclusion, per-metric ranks, percentiles, and median calculations.
 - `lib/devperf/report.rb`: human-readable terminal report.
 - `README.md`: setup, permissions, invocation examples, metric definitions, and limitations.
 
-Only Ruby standard-library code and the existing `gh` executable are required. The tool fetches fresh data every run, keeps it in memory, and writes no cache or export files.
+Only Ruby standard-library code and the existing `gh` executable are required. GitHub access remains read-only; the only persistent output is the local daily JSON cache.
 
 ## Errors and limitations
 
@@ -57,8 +66,8 @@ Only Ruby standard-library code and the existing `gh` executable are required. T
 
 ## Alternatives considered
 
-- **Ruby plus `gh api` (selected):** matches the requested runtime, uses the user's existing authentication, and avoids dependency installation and persistent storage.
-- **Ruby plus SQLite or raw JSON cache:** useful for offline re-analysis and repeated historical queries, but unnecessary for weekly fresh runs and adds state to manage.
+- **Ruby plus `gh api` (selected):** matches the requested runtime, uses the user's existing authentication, and avoids dependency installation. A small daily JSON cache handles repeat historical queries without a database.
+- **Ruby plus daily JSON cache (selected):** avoids a database dependency and reuses completed dates across weekly runs; SQLite would add unnecessary setup for this single-user script.
 - **Adopt `tre-systems/github-org-metrics`:** it already covers broad organization metrics in Python and is MIT-licensed. It remains a useful reference, but the requested Ruby command and own-versus-other PR comment rankings need custom behavior. The local checkout was inspected for API batching and PR collection patterns; no code is copied.
 
 ## First-pass verification

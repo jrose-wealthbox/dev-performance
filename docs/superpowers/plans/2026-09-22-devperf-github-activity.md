@@ -1,5 +1,7 @@
 # DevPerf GitHub Activity CLI Implementation Plan
 
+> Historical plan for the initial no-cache implementation. The daily cache extension is documented in `docs/superpowers/specs/2026-09-22-devperf-github-activity-design.md` and `README.md` and supersedes this plan's original no-cache constraint.
+
 > **For agentic workers:** Implement this plan task by task in the current session. Keep the implementation dependency-free and keep fetched activity in memory.
 
 **Goal:** Build a Ruby CLI that collects one repository's GitHub activity for a date range and reports per-metric peer rankings and percentiles.

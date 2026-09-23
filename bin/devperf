@@ -7,6 +7,8 @@ $LOAD_PATH.unshift(File.expand_path("../lib", __dir__))
 
 require "devperf/github_client"
 require "devperf/collector"
+require "devperf/activity_cache"
+require "devperf/cached_collector"
 require "devperf/metrics"
 require "devperf/report"
 
@@ -82,7 +84,8 @@ module DevPerf
     end
 
     client = GitHubClient.new
-    activity = Collector.new(client).collect(repo: options[:repo], from: options[:from], to: options[:to])
+    collector = CachedCollector.new(Collector.new(client), cache: ActivityCache.new)
+    activity = collector.collect(repo: options[:repo], from: options[:from], to: options[:to])
     rows = Metrics.new(activity, options[:login]).rows
     puts Report.render(rows, login: options[:login], repo: options[:repo], from: options[:from], to: options[:to])
     0

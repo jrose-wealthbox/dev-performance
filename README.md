@@ -7,6 +7,7 @@ A small local Ruby CLI for comparing GitHub activity in one repository over a se
 - Ruby 2.6 or newer
 - GitHub CLI (`gh`) installed and authenticated
 - Read access to the repository's contents and pull requests (for a private repository)
+- Write access under the local cache directory (`~/.cache/devperf`)
 
 Check GitHub CLI authentication with:
 
@@ -14,7 +15,7 @@ Check GitHub CLI authentication with:
 gh auth status
 ```
 
-The script makes read-only API calls through `gh api`. It does not store a token, use a separate GitHub SDK, or write downloaded activity to disk.
+The script makes read-only API calls through `gh api`. It does not store a token or use a separate GitHub SDK.
 
 ## Usage
 
@@ -32,6 +33,18 @@ bin/devperf login=jrose-wealthbox repo=starburstlabs/crm-web from=2026-06-25 to=
 ```
 
 `days=N` covers exactly N UTC calendar dates, including today. `from` and `to` must be supplied together and cannot be combined with `days`.
+
+## Local cache
+
+Completed historical activity is cached as one JSON file per UTC date:
+
+```text
+~/.cache/devperf/v1/<owner>/<repo>/<YYYY-MM-DD>.json
+```
+
+The files contain only normalized account/date/count records needed for the report—not GitHub credentials, raw API responses, or comment text. Cached days are reused across overlapping date ranges. Today's partial results and future dates are always fetched fresh and are never cached. Missing dates are fetched in contiguous chunks of at most 30 days; each successfully completed chunk is cached before the next starts.
+
+A cold request can still hit GitHub's API limit. In particular, PR activity discovery includes PRs updated after the requested dates so that older reviews and comments on those PRs are not missed; the current collector may therefore revisit PRs across date chunks. Completed chunks remain cached if a later chunk fails, so rerunning can reuse that work. To force a historical refresh, remove the corresponding date files under `~/.cache/devperf/v1` before running again.
 
 ## What it reports
 
